@@ -1,0 +1,26 @@
+name: Волейбольный опрос
+
+# Когда запускать:
+on:
+  schedule:
+    # 12:00 по Москве. Время GitHub указывается в UTC, а Москва = UTC+3,
+    # поэтому здесь 09:00 UTC. Формат: минута час * * *
+    - cron: "0 9 * * *"
+  # Кнопка ручного запуска (вкладка Actions -> Run workflow) — для проверки.
+  workflow_dispatch: {}
+
+jobs:
+  send-poll:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Отправить опрос
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: python send_poll.py

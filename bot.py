@@ -10,7 +10,7 @@ import os
 from datetime import time
 from zoneinfo import ZoneInfo
 
-from telegram import Update
+from telegram import BotCommand, Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 # --- Настройки опроса ---------------------------------------------------------
@@ -95,6 +95,19 @@ def make_poll_command(question: str):
 
 # --- Запуск -------------------------------------------------------------------
 
+async def register_commands(application: Application) -> None:
+    """Регистрирует список команд у Телеграма, чтобы при вводе «/» в чате
+    выпадало меню с подсказками."""
+    commands = [
+        BotCommand("poll", "опрос «Играем сегодня в волейбол?»"),
+        *[BotCommand(cmd, f"опрос «{title}»") for cmd, title in EXTRA_POLLS.items()],
+        BotCommand("chatid", "показать ID этого чата"),
+        BotCommand("help", "справка"),
+    ]
+    await application.bot.set_my_commands(commands)
+    logger.info("Меню команд зарегистрировано: %s", [c.command for c in commands])
+
+
 def main() -> None:
     token = os.environ.get("BOT_TOKEN")
     if not token:
@@ -103,9 +116,9 @@ def main() -> None:
             "Пример: export BOT_TOKEN='123456:ABC...'"
         )
 
-    application = Application.builder().token(token).build()
+    application = Application.builder().token(token).post_init(register_commands).build()
 
-    application.add_handler(CommandHandler("start", cmd_start))
+    application.add_handler(CommandHandler(["start", "help"], cmd_start))
     application.add_handler(CommandHandler("chatid", cmd_chatid))
     application.add_handler(CommandHandler("poll", make_poll_command(QUESTION)))
     for cmd, title in EXTRA_POLLS.items():

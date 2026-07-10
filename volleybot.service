@@ -1,0 +1,22 @@
+# Systemd-сервис для волейбольного бота.
+# Предполагается, что проект лежит в /opt/volleybot (см. README, раздел про VPS).
+# Установка:
+#   sudo cp volleybot.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now volleybot
+
+[Unit]
+Description=Telegram volleyball poll bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/opt/volleybot
+# Токен и ID чата бот читает из файла /opt/volleybot/.env (формат KEY=value)
+EnvironmentFile=/opt/volleybot/.env
+ExecStart=/opt/volleybot/.venv/bin/python bot.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

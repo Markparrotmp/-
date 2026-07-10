@@ -18,6 +18,13 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 QUESTION = "Играем сегодня в волейбол? 🏐"
 OPTIONS = ["Да ✅", "Нет ❌", "50 на 50 🤔"]
 
+# Дополнительные опросы, которые создаются командами: /ab -> «аб», /pest -> «пест».
+# Чтобы добавить новый опрос, просто допиши строку: "команда": "название опроса".
+EXTRA_POLLS = {
+    "ab": "аб",
+    "pest": "пест",
+}
+
 # Часовой пояс и время ежедневной отправки (12:00 по Москве).
 TIMEZONE = ZoneInfo("Europe/Moscow")
 POLL_TIME = time(hour=12, minute=0, tzinfo=TIMEZONE)
@@ -50,12 +57,14 @@ async def send_volleyball_poll(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Приветствие и краткая справка."""
+    extra = "\n".join(f"/{cmd} — опрос «{title}»" for cmd, title in EXTRA_POLLS.items())
     await update.effective_message.reply_text(
         "Привет! Я бот для волейбольной беседы. 🏐\n\n"
         "Каждый день в 12:00 по Москве я присылаю опрос: играем сегодня или нет.\n\n"
         "Команды:\n"
-        "/chatid — узнать ID этого чата (нужно для настройки)\n"
-        "/poll — отправить опрос прямо сейчас (для проверки)"
+        "/poll — отправить ежедневный опрос прямо сейчас\n"
+        f"{extra}\n"
+        "/chatid — узнать ID этого чата (нужно для настройки)"
     )
 
 
@@ -69,15 +78,19 @@ async def cmd_chatid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     )
 
 
-async def cmd_poll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Отправляет опрос немедленно — удобно для проверки."""
-    await context.bot.send_poll(
-        chat_id=update.effective_chat.id,
-        question=QUESTION,
-        options=OPTIONS,
-        is_anonymous=False,
-        allows_multiple_answers=False,
-    )
+def make_poll_command(question: str):
+    """Возвращает обработчик команды, отправляющий опрос с заданным вопросом."""
+
+    async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await context.bot.send_poll(
+            chat_id=update.effective_chat.id,
+            question=question,
+            options=OPTIONS,
+            is_anonymous=False,
+            allows_multiple_answers=False,
+        )
+
+    return handler
 
 
 # --- Запуск -------------------------------------------------------------------
@@ -94,7 +107,9 @@ def main() -> None:
 
     application.add_handler(CommandHandler("start", cmd_start))
     application.add_handler(CommandHandler("chatid", cmd_chatid))
-    application.add_handler(CommandHandler("poll", cmd_poll))
+    application.add_handler(CommandHandler("poll", make_poll_command(QUESTION)))
+    for cmd, title in EXTRA_POLLS.items():
+        application.add_handler(CommandHandler(cmd, make_poll_command(title)))
 
     # Планируем ежедневную отправку, если известен ID чата.
     chat_id = os.environ.get("CHAT_ID")

@@ -1,6 +1,9 @@
 # Секреты
 .env
 
+# Рабочее состояние бота
+state.json
+
 # Python
 __pycache__/
 *.py[cod]

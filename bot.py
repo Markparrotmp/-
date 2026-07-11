@@ -5,9 +5,11 @@
 планировщик сам отправляет опрос в нужное время.
 """
 
+import json
 import logging
 import os
-from datetime import time
+from datetime import datetime, time
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from telegram import BotCommand, Update
@@ -29,6 +31,10 @@ EXTRA_POLLS = {
 TIMEZONE = ZoneInfo("Europe/Moscow")
 POLL_TIME = time(hour=12, minute=0, tzinfo=TIMEZONE)
 
+# Файл, где бот запоминает, что сегодня опрос уже вызывали вручную
+# (переживает перезапуски бота).
+STATE_FILE = Path(__file__).with_name("state.json")
+
 # --- Логирование --------------------------------------------------------------
 
 logging.basicConfig(
@@ -38,11 +44,36 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+# --- Учёт ручных опросов (чтобы не спамить) -----------------------------------
+
+def _today() -> str:
+    return datetime.now(TIMEZONE).date().isoformat()
+
+
+def mark_manual_poll() -> None:
+    """Запоминает, что сегодня в основной беседе опрос уже вызывали вручную."""
+    STATE_FILE.write_text(json.dumps({"last_manual_poll": _today()}))
+
+
+def manual_poll_sent_today() -> bool:
+    try:
+        data = json.loads(STATE_FILE.read_text())
+    except (FileNotFoundError, ValueError):
+        return False
+    return data.get("last_manual_poll") == _today()
+
+
 # --- Отправка опроса ----------------------------------------------------------
 
 async def send_volleyball_poll(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Отправляет опрос в беседу. Вызывается планировщиком и командой /poll."""
+    """Ежедневный опрос по расписанию. Пропускается, если сегодня опрос
+    уже вызывали вручную командой (/poll, /ab или /pest)."""
     chat_id = context.job.chat_id
+    if manual_poll_sent_today():
+        logger.info(
+            "Ежедневный опрос пропущен: сегодня опрос уже вызывали вручную."
+        )
+        return
     await context.bot.send_poll(
         chat_id=chat_id,
         question=QUESTION,
@@ -82,13 +113,19 @@ def make_poll_command(question: str):
     """Возвращает обработчик команды, отправляющий опрос с заданным вопросом."""
 
     async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
         await context.bot.send_poll(
-            chat_id=update.effective_chat.id,
+            chat_id=chat_id,
             question=question,
             options=OPTIONS,
             is_anonymous=False,
             allows_multiple_answers=False,
         )
+        # Если опрос вызвали в основной беседе — сегодня автоматический
+        # опрос в 12:00 уже не нужен.
+        if str(chat_id) == os.environ.get("CHAT_ID", ""):
+            mark_manual_poll()
+            logger.info("Ручной опрос в основной беседе — дневной опрос сегодня отменён.")
 
     return handler
 

@@ -5,9 +5,12 @@
 планировщик сам отправляет опрос в нужное время.
 """
 
+import asyncio
 import json
 import logging
 import os
+import urllib.parse
+import urllib.request
 from datetime import datetime, time
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -35,6 +38,44 @@ POLL_TIME = time(hour=12, minute=0, tzinfo=TIMEZONE)
 # (переживает перезапуски бота).
 STATE_FILE = Path(__file__).with_name("state.json")
 
+# --- Погода (Open-Meteo, бесплатно и без ключа) --------------------------------
+# Координаты: Железнодорожный (Балашиха), Московская область.
+WEATHER_LAT = 55.744
+WEATHER_LON = 38.017
+# Игра около 17:30 — усредняем прогноз на 17:00 и 18:00.
+WEATHER_HOURS = (17, 18)
+WEATHER_LABEL = "к 17:30"
+
+# Коды погоды WMO -> (описание, эмодзи)
+WEATHER_DESCRIPTIONS = {
+    0: ("ясно", "☀️"),
+    1: ("почти ясно", "🌤"),
+    2: ("переменная облачность", "⛅"),
+    3: ("пасмурно", "☁️"),
+    45: ("туман", "🌫"),
+    48: ("туман", "🌫"),
+    51: ("морось", "🌦"),
+    53: ("морось", "🌦"),
+    55: ("морось", "🌦"),
+    61: ("небольшой дождь", "🌧"),
+    63: ("дождь", "🌧"),
+    65: ("сильный дождь", "🌧"),
+    66: ("ледяной дождь", "🌧"),
+    67: ("ледяной дождь", "🌧"),
+    71: ("небольшой снег", "🌨"),
+    73: ("снег", "🌨"),
+    75: ("сильный снег", "🌨"),
+    77: ("снег", "🌨"),
+    80: ("ливень", "🌧"),
+    81: ("ливень", "🌧"),
+    82: ("сильный ливень", "🌧"),
+    85: ("снегопад", "🌨"),
+    86: ("снегопад", "🌨"),
+    95: ("гроза", "⛈"),
+    96: ("гроза с градом", "⛈"),
+    99: ("гроза с градом", "⛈"),
+}
+
 # --- Логирование --------------------------------------------------------------
 
 logging.basicConfig(
@@ -42,6 +83,46 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
+
+
+# --- Получение прогноза погоды --------------------------------------------------
+
+def _fetch_weather_sync() -> str:
+    """Запрашивает прогноз у Open-Meteo и возвращает строку для опроса."""
+    params = urllib.parse.urlencode({
+        "latitude": WEATHER_LAT,
+        "longitude": WEATHER_LON,
+        "hourly": "temperature_2m,precipitation_probability,weather_code",
+        "forecast_days": 1,
+        "timezone": "Europe/Moscow",
+    })
+    url = f"https://api.open-meteo.com/v1/forecast?{params}"
+    with urllib.request.urlopen(url, timeout=6) as resp:
+        hourly = json.load(resp)["hourly"]
+
+    temps = [hourly["temperature_2m"][h] for h in WEATHER_HOURS]
+    rain_probs = [hourly["precipitation_probability"][h] or 0 for h in WEATHER_HOURS]
+    code = hourly["weather_code"][WEATHER_HOURS[0]]
+
+    temp = round(sum(temps) / len(temps))
+    rain = max(rain_probs)
+    desc, emoji = WEATHER_DESCRIPTIONS.get(code, ("", "🌡"))
+
+    line = f"Погода {WEATHER_LABEL}: {temp:+d}° {emoji} {desc}".rstrip()
+    if rain >= 20:
+        line += f", вероятность осадков {rain}%"
+    return line
+
+
+async def with_weather(question: str) -> str:
+    """Добавляет к вопросу опроса строку с прогнозом. Если погода недоступна,
+    опрос уходит без неё — сам опрос важнее."""
+    try:
+        weather = await asyncio.to_thread(_fetch_weather_sync)
+    except Exception as exc:
+        logger.warning("Не удалось получить погоду: %s", exc)
+        return question
+    return f"{question}\n\n{weather}"
 
 
 # --- Учёт ручных опросов (чтобы не спамить) -----------------------------------
@@ -76,7 +157,7 @@ async def send_volleyball_poll(context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     await context.bot.send_poll(
         chat_id=chat_id,
-        question=QUESTION,
+        question=await with_weather(QUESTION),
         options=OPTIONS,
         is_anonymous=False,  # видно, кто как проголосовал
         allows_multiple_answers=False,
@@ -116,7 +197,7 @@ def make_poll_command(question: str):
         chat_id = update.effective_chat.id
         await context.bot.send_poll(
             chat_id=chat_id,
-            question=question,
+            question=await with_weather(question),
             options=OPTIONS,
             is_anonymous=False,
             allows_multiple_answers=False,

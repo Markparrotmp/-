@@ -1,0 +1,14 @@
+# Systemd-сервис отправки комплимента (запускается таймером complimentbot.timer).
+# Проект лежит в /opt/complimentbot (ставится скриптом compliment-bot/setup.sh).
+
+[Unit]
+Description=Daily compliment sender
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/complimentbot/compliment-bot
+# Токены бот читает из /opt/complimentbot/compliment-bot/.env (формат KEY=value)
+EnvironmentFile=/opt/complimentbot/compliment-bot/.env
+ExecStart=/opt/complimentbot/.venv/bin/python send_compliment.py

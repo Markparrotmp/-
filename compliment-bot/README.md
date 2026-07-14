@@ -12,10 +12,11 @@
 - **Открытка** рисуется программно (`postcard.py`): мягкий градиент, боке,
   сердечки и короткая тёплая надпись. Палитра и надпись меняются по дате —
   7 цветовых тем и 10 фраз, так что открытки не повторяются подряд.
-- **Расписание** — GitHub Actions запускает отправку каждый день в 09:00 по
-  Москве (`.github/workflows/daily-compliment.yml`).
+- **Расписание** — systemd-таймер на вашем сервере запускает отправку каждый
+  день в 09:00 по Москве. Если сервер был выключен в это время, комплимент
+  уйдёт сразу после включения (`Persistent=true`).
 
-## Настройка
+## Установка на сервер
 
 ### 1. Создайте бота
 
@@ -30,31 +31,44 @@
    `https://api.telegram.org/bot<ТОКЕН>/getUpdates`
 3. В ответе найдите `"chat":{"id": 123456789, ...}` — это и есть **chat_id**.
 
-### 3. Добавьте секреты в репозиторий
+### 3. Запустите установку на сервере
 
-GitHub → Settings → Secrets and variables → Actions:
+Одной командой от root:
 
-| Тип | Имя | Значение |
-|---|---|---|
-| Secret | `COMPLIMENT_BOT_TOKEN` | токен от BotFather |
-| Secret | `COMPLIMENT_CHAT_ID` | chat_id получательницы |
-| Secret | `ANTHROPIC_API_KEY` | ключ с [platform.claude.com](https://platform.claude.com) (необязательно, но с ним тексты каждый день уникальные) |
-| Variable | `HER_NAME` | имя, как вы её называете (необязательно, по умолчанию «солнышко») |
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/Markparrotmp/-/main/compliment-bot/setup.sh)
+```
 
-### 4. Проверьте вручную
+Скрипт спросит токен, chat_id, ключ Claude API (можно пропустить) и имя,
+поставит зависимости, включит расписание и предложит отправить тестовый
+комплимент сразу. Запускать можно повторно — он просто обновит бота.
 
-GitHub → Actions → **Daily compliment** → **Run workflow**. Через минуту
-сообщение с открыткой придёт в Telegram.
+### Полезные команды
+
+```bash
+systemctl list-timers complimentbot.timer   # когда следующий запуск
+systemctl start complimentbot.service       # отправить прямо сейчас
+journalctl -u complimentbot -n 30           # логи
+nano /opt/complimentbot/compliment-bot/.env # поменять токен/ключ/имя
+```
 
 ## Изменить время отправки
 
-В `.github/workflows/daily-compliment.yml` поправьте cron (время в UTC):
+На сервере отредактируйте `/etc/systemd/system/complimentbot.timer`:
 
-```yaml
-- cron: "0 6 * * *"   # 06:00 UTC = 09:00 МСК
+```ini
+OnCalendar=*-*-* 09:00:00 Europe/Moscow
 ```
 
-Например, `"30 4 * * *"` — это 07:30 по Москве.
+Например, `08:30:00` — в 08:30 по Москве. После правки:
+`systemctl daemon-reload`.
+
+## Ручной тест через GitHub Actions (запасной вариант)
+
+Workflow `.github/workflows/daily-compliment.yml` оставлен без расписания —
+только ручной запуск (Actions → Daily compliment → Run workflow). Для него
+нужны секреты `COMPLIMENT_BOT_TOKEN`, `COMPLIMENT_CHAT_ID` и (по желанию)
+`ANTHROPIC_API_KEY` в настройках репозитория.
 
 ## Запуск локально
 

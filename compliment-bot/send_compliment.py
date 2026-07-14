@@ -121,7 +121,7 @@ def main() -> int:
         print("Нужны переменные окружения TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID")
         return 1
 
-    name = os.environ.get("HER_NAME", "солнышко")
+    name = os.environ.get("HER_NAME") or "солнышко"
     today = date.today()
 
     text = generate_with_claude(name, today) or fallback_compliment(name, today)

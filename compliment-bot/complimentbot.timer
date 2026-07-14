@@ -1,0 +1,13 @@
+# Таймер: каждый день в 09:00 по Москве.
+# Persistent=true — если сервер был выключен в 09:00, комплимент уйдёт
+# сразу после включения, день не пропадёт.
+
+[Unit]
+Description=Send daily compliment at 09:00 MSK
+
+[Timer]
+OnCalendar=*-*-* 09:00:00 Europe/Moscow
+Persistent=true
+
+[Install]
+WantedBy=timers.target

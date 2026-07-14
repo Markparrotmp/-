@@ -1,9 +1,8 @@
 name: Daily compliment
 
+# Ежедневную отправку делает сервер (systemd-таймер, см. compliment-bot/setup.sh).
+# Этот workflow оставлен только для ручного теста из вкладки Actions.
 on:
-  schedule:
-    # 06:00 UTC = 09:00 по Москве
-    - cron: "0 6 * * *"
   workflow_dispatch: {}
 
 jobs:

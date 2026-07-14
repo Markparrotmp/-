@@ -23,11 +23,12 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 QUESTION = "Играем сегодня в волейбол? 🏐"
 OPTIONS = ["Да ✅", "Нет ❌", "50 на 50 🤔"]
 
-# Дополнительные опросы, которые создаются командами: /ab -> «аб», /pest -> «пест».
-# Чтобы добавить новый опрос, просто допиши строку: "команда": "название опроса".
+# Дополнительные опросы, которые создаются командами: /ab -> «аб» и т.д.
+# Формат: "команда": ("название опроса", добавлять ли прогноз погоды).
 EXTRA_POLLS = {
-    "ab": "аб",
-    "pest": "пест",
+    "ab": ("аб", True),
+    "pest": ("пест", True),
+    "pursh": ("пурш", False),
 }
 
 # Часовой пояс и время ежедневной отправки (12:00 по Москве).
@@ -169,7 +170,9 @@ async def send_volleyball_poll(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Приветствие и краткая справка."""
-    extra = "\n".join(f"/{cmd} — опрос «{title}»" for cmd, title in EXTRA_POLLS.items())
+    extra = "\n".join(
+        f"/{cmd} — опрос «{title}»" for cmd, (title, _) in EXTRA_POLLS.items()
+    )
     await update.effective_message.reply_text(
         "Привет! Я бот для волейбольной беседы. 🏐\n\n"
         "Каждый день в 12:00 по Москве я присылаю опрос: играем сегодня или нет.\n\n"
@@ -190,14 +193,15 @@ async def cmd_chatid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     )
 
 
-def make_poll_command(question: str):
+def make_poll_command(question: str, add_weather: bool = True):
     """Возвращает обработчик команды, отправляющий опрос с заданным вопросом."""
 
     async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
+        text = await with_weather(question) if add_weather else question
         await context.bot.send_poll(
             chat_id=chat_id,
-            question=await with_weather(question),
+            question=text,
             options=OPTIONS,
             is_anonymous=False,
             allows_multiple_answers=False,
@@ -218,7 +222,7 @@ async def register_commands(application: Application) -> None:
     выпадало меню с подсказками."""
     commands = [
         BotCommand("poll", "опрос «Играем сегодня в волейбол?»"),
-        *[BotCommand(cmd, f"опрос «{title}»") for cmd, title in EXTRA_POLLS.items()],
+        *[BotCommand(cmd, f"опрос «{title}»") for cmd, (title, _) in EXTRA_POLLS.items()],
         BotCommand("chatid", "показать ID этого чата"),
         BotCommand("help", "справка"),
     ]
@@ -239,8 +243,8 @@ def main() -> None:
     application.add_handler(CommandHandler(["start", "help"], cmd_start))
     application.add_handler(CommandHandler("chatid", cmd_chatid))
     application.add_handler(CommandHandler("poll", make_poll_command(QUESTION)))
-    for cmd, title in EXTRA_POLLS.items():
-        application.add_handler(CommandHandler(cmd, make_poll_command(title)))
+    for cmd, (title, add_weather) in EXTRA_POLLS.items():
+        application.add_handler(CommandHandler(cmd, make_poll_command(title, add_weather)))
 
     # Планируем ежедневную отправку, если известен ID чата.
     chat_id = os.environ.get("CHAT_ID")

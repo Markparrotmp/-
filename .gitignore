@@ -4,6 +4,9 @@
 # Рабочее состояние бота
 state.json
 
+# Сгенерированные открытки
+compliment-bot/postcard.png
+
 # Python
 __pycache__/
 *.py[cod]
